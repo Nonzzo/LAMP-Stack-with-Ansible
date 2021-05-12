@@ -1,0 +1,113 @@
+- name: Deploy lamp stack application
+  hosts: all
+  become: yes
+  tasks:
+    - name: Install common dependencies
+      yum:
+        name:
+          - libselinux-python
+          - libsemanage-python
+          - firewalld
+        state: installed
+
+- name: Deploy lamp stack application
+  hosts: lamp-db
+  become: yes
+  tasks:
+    - name: ensure a list of packages installed
+      yum:
+        name: "{{ packages }}"
+      vars:
+        packages:
+          - mariadb-server
+          - MySQL-python
+        state: installed
+    - name: Copy a "sudoers" file on the remote machine
+      copy:
+        src: files/my.cnf
+        dest: /etc/my.cnf
+    - name: Start service mariadb, if not started
+      service:
+        name: mariadb
+        state: started
+        enabled: yes
+    - name: Start service firewalld, if not started
+      service:
+        name: firewalld
+        state: started
+        enabled: yes
+
+    - firewalld:
+        port: 3306/tcp
+        permanent: yes
+        state: enabled
+        zone: public
+        immediate: yes
+
+    - name: Create new databases with names dbname as a variable
+      mysql_db:
+        name: "{{ dbname }}"
+        state: present
+    - name: Create database user with name dbuser
+      mysql_user:
+        name: "{{ dbuser }}"
+        password: "{{ dbpassword }}"
+        priv: '*.*:ALL'
+        state: present
+        host: 172.20.1.100
+
+    - name: Copy script
+      copy:
+        src: files/db-load-script.sql
+        dest: /tmp/db-load-script.sql
+
+    - name: Execute the command in database server.
+      shell: mysql -f < /tmp/db-load-script.sql
+
+- name: Deploy lamp stack application
+  hosts: lamp-web
+  become: yes
+  tasks:
+    - name: ensure a list of packages webserver
+      yum:
+        name: "{{ packages }}"
+      vars:
+        packages:
+          - httpd
+          - php
+          - php-mysql
+        state: installed
+    - name: Install git package
+      yum:
+        name: git
+        state: present
+    - name: Start service firewalld, if not started
+      service:
+        name: firewalld
+        state: started
+        enabled: yes
+    - firewalld:
+        port: "{{ httpd_port }}/tcp"
+        permanent: yes
+        state: enabled
+        zone: public
+        immediate: yes
+    - name: Set index.php as the default page by changing Directory index
+      lineinfile:
+        path: /etc/httpd/conf/httpd.conf
+        regexp: '^DirectoryIndex index.html'
+        line: "DirectoryIndex index.php"
+    - name: Start service httpd, if not started
+      service:
+        name: httpd
+        state: started
+        enabled: yes
+
+    - git: #Clone the source code from the repository using the variable in the inventory
+        repo: "{{ repository }}"
+        dest: /var/www/html/
+
+    - name: Copy the custom index.php file
+      copy:
+        src: files/index.php
+        dest: /var/www/html/index.php

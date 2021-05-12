@@ -6,3 +6,4 @@ There is the inventory files for that. Create an inventory file which include th
 Hosts: lamp-web, lamp-db
 Groups: db_servers contains lamp-db; web_servers contains lamp-web
 the repository variable : repository=https://github.com/kodekloudhub/learning-app-ecommerce.git
+##
